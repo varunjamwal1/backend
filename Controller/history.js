@@ -84,89 +84,89 @@ const sendFineStatusUpdateEmail = async (student, fine) => {
 // =====================================
 // ADD HISTORY (ADD FINES TO STUDENT)
 // =====================================
-exports.addHistory = async (req, res) => {
-  try {
-    const { roll, student, fines } = req.body;
+// exports.addHistory = async (req, res) => {
+//   try {
+//     const { roll, student, fines } = req.body;
 
-    if (!roll || !student || !Array.isArray(fines) || fines.length === 0) {
-      return res.status(400).json({
-        success: false,
-        msg: "Missing required fields",
-      });
-    }
+//     if (!roll || !student || !Array.isArray(fines) || fines.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         msg: "Missing required fields",
+//       });
+//     }
 
-    // Validate fineIds
-    for (const f of fines) {
-      if (!f.fineId) {
-        return res.status(400).json({
-          success: false,
-          msg: "fineId missing in fines array",
-        });
-      }
-    }
+//     // Validate fineIds
+//     for (const f of fines) {
+//       if (!f.fineId) {
+//         return res.status(400).json({
+//           success: false,
+//           msg: "fineId missing in fines array",
+//         });
+//       }
+//     }
 
-    // Fetch fines
-    const fineRecords = await FineModel.find({
-      _id: { $in: fines.map(f => f.fineId) },
-    });
+//     // Fetch fines
+//     const fineRecords = await FineModel.find({
+//       _id: { $in: fines.map(f => f.fineId) },
+//     });
 
-    if (fineRecords.length !== fines.length) {
-      return res.status(404).json({
-        success: false,
-        msg: "Some fines do not exist",
-      });
-    }
+//     if (fineRecords.length !== fines.length) {
+//       return res.status(404).json({
+//         success: false,
+//         msg: "Some fines do not exist",
+//       });
+//     }
 
-    // Prepare fines
-    const processedFines = fines.map(inputFine => {
-      const dbFine = fineRecords.find(
-        f => f._id.toString() === inputFine.fineId.toString()
-      );
+//     // Prepare fines
+//     const processedFines = fines.map(inputFine => {
+//       const dbFine = fineRecords.find(
+//         f => f._id.toString() === inputFine.fineId.toString()
+//       );
 
-      return {
-        fineId: dbFine._id,
-        name: dbFine.name,
-        amount: dbFine.amount,
-        status: inputFine.status || "unpaid",
-        paidAt: inputFine.status === "paid" ? new Date() : null,
-      };
-    });
+//       return {
+//         fineId: dbFine._id,
+//         name: dbFine.name,
+//         amount: dbFine.amount,
+//         status: inputFine.status || "unpaid",
+//         paidAt: inputFine.status === "paid" ? new Date() : null,
+//       };
+//     });
 
-    const totalFine = processedFines.reduce(
-      (sum, f) => sum + f.amount,
-      0
-    );
+//     const totalFine = processedFines.reduce(
+//       (sum, f) => sum + f.amount,
+//       0
+//     );
 
-    const history = await HistoryModel.create({
-      roll,
-      student,
-      fines: processedFines,
-      totalFine,
-      addedBy: req.user._id,
-    });
+//     const history = await HistoryModel.create({
+//       roll,
+//       student,
+//       fines: processedFines,
+//       totalFine,
+//       addedBy: req.user._id,
+//     });
 
-    await history.populate("student", "name email");
+//     await history.populate("student", "name email");
 
-    // ✅ RESPOND FIRST (CRITICAL FIX)
-    res.status(201).json({
-      success: true,
-      msg: "History added successfully",
-      history,
-    });
+//     // ✅ RESPOND FIRST (CRITICAL FIX)
+//     res.status(201).json({
+//       success: true,
+//       msg: "History added successfully",
+//       history,
+//     });
 
-    // ✅ SEND EMAIL ASYNC (DO NOT BLOCK API)
-    sendFineAddedEmail(history.student, history)
-      .catch(err => console.error("EMAIL ERROR:", err.message));
+//     // ✅ SEND EMAIL ASYNC (DO NOT BLOCK API)
+//     sendFineAddedEmail(history.student, history)
+//       .catch(err => console.error("EMAIL ERROR:", err.message));
 
-  } catch (error) {
-    console.error("ADD HISTORY ERROR:", error);
-    res.status(500).json({
-      success: false,
-      msg: "Server error",
-      error: error.message,
-    });
-  }
-};
+//   } catch (error) {
+//     console.error("ADD HISTORY ERROR:", error);
+//     res.status(500).json({
+//       success: false,
+//       msg: "Server error",
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 // =====================================
@@ -221,12 +221,141 @@ exports.getUserHistory = async (req, res) => {
 // =====================================
 // UPDATE FINE STATUS + EMAIL
 // =====================================
+// exports.updateFineStatus = async (req, res) => {
+//   try {
+//     const { historyId, fineId, status } = req.body;
+
+//     if (!historyId || !fineId || !status) {
+//       return res.status(400).json({
+//         success: false,
+//         msg: "Missing required fields"
+//       });
+//     }
+
+//     const history = await HistoryModel.findOneAndUpdate(
+//       {
+//         _id: historyId,
+//         "fines.fineId": fineId
+//       },
+//       {
+//         $set: {
+//           "fines.$.status": status,
+//           "fines.$.paidAt": status === "paid" ? new Date() : null
+//         }
+//       },
+//       { new: true }
+//     ).populate("student", "name email");
+
+//     if (!history) {
+//       return res.status(404).json({
+//         success: false,
+//         msg: "History or fine not found"
+//       });
+//     }
+
+//     const updatedFine = history.fines.find(
+//       f => f.fineId.toString() === fineId.toString()
+//     );
+
+//     /* ---------------- EMAIL (SAFE) ---------------- */
+//     if (history.student?.email && updatedFine) {
+//       try {
+//         await sendFineStatusUpdateEmail(history.student, updatedFine);
+//       } catch (emailError) {
+//         console.error("EMAIL ERROR (ignored):", emailError.message);
+//       }
+//     }
+
+//     /* ---------------- RESPONSE ---------------- */
+//     return res.status(200).json({
+//       success: true,
+//       msg: "Fine status updated successfully",
+//       history
+//     });
+
+//   } catch (error) {
+//     console.error("UPDATE FINE STATUS ERROR:", error);
+//     return res.status(500).json({
+//       success: false,
+//       msg: "Server error"
+//     });
+//   }
+// };
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ================= ADD HISTORY ================= */
+exports.addHistory = async (req, res) => {
+  try {
+    const { roll, student, fines } = req.body;
+
+    if (!roll || !student || !Array.isArray(fines) || !fines.length) {
+      return res.status(400).json({ success: false, msg: "Missing fields" });
+    }
+
+    const fineRecords = await FineModel.find({
+      _id: { $in: fines.map(f => f.fineId) }
+    });
+
+    if (fineRecords.length !== fines.length) {
+      return res.status(404).json({ success: false, msg: "Invalid fines" });
+    }
+
+    const processedFines = fines.map(f => {
+      const dbFine = fineRecords.find(d => d._id.toString() === f.fineId);
+      return {
+        fineId: dbFine._id,
+        name: dbFine.name,
+        amount: dbFine.amount,
+        status: f.status || "unpaid",
+        paidAt: f.status === "paid" ? new Date() : null
+      };
+    });
+
+    const history = await HistoryModel.create({
+      roll,
+      student,
+      fines: processedFines,
+      totalFine: processedFines.reduce((s, f) => s + f.amount, 0),
+      addedBy: req.user._id
+    });
+
+    await history.populate("student", "name email");
+
+    res.status(201).json({ success: true, history });
+
+    sendFineAddedEmail(history.student, history)
+      .catch(err => console.error("EMAIL ERROR:", err.message));
+
+  } catch (err) {
+    res.status(500).json({ success: false, msg: err.message });
+  }
+};
+
+/* ================= UPDATE FINE STATUS ================= */
 exports.updateFineStatus = async (req, res) => {
   try {
     const { historyId, fineId, status } = req.body;
 
+    if (!["paid", "unpaid"].includes(status)) {
+      return res.status(400).json({ success: false, msg: "Invalid status" });
+    }
+
     const history = await HistoryModel.findOneAndUpdate(
-      { _id: historyId, "fines.fineId": fineId },
+      {
+        _id: historyId,
+        "fines.fineId": new mongoose.Types.ObjectId(fineId)
+      },
       {
         $set: {
           "fines.$.status": status,
@@ -237,30 +366,19 @@ exports.updateFineStatus = async (req, res) => {
     ).populate("student", "name email");
 
     if (!history) {
-      return res.status(404).json({
-        success: false,
-        msg: "History or fine not found"
-      });
+      return res.status(404).json({ success: false, msg: "Not found" });
     }
 
-    const updatedFine = history.fines.find(
+    const fine = history.fines.find(
       f => f.fineId.toString() === fineId
     );
 
-    // SEND EMAIL
-    await sendFineStatusUpdateEmail(history.student, updatedFine);
+    sendFineStatusUpdateEmail(history.student, fine)
+      .catch(() => {});
 
-    res.json({
-      success: true,
-      msg: "Fine status updated successfully",
-      history
-    });
+    res.status(200).json({ success: true, history });
 
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+  } catch (err) {
+    res.status(500).json({ success: false, msg: err.message });
   }
 };
