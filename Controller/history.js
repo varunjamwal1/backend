@@ -91,35 +91,36 @@ exports.addHistory = async (req, res) => {
     if (!roll || !student || !Array.isArray(fines) || fines.length === 0) {
       return res.status(400).json({
         success: false,
-        msg: "Missing required fields"
+        msg: "Missing required fields",
       });
     }
 
-    // Validate fineId
-    for (let f of fines) {
+    // Validate fineIds
+    for (const f of fines) {
       if (!f.fineId) {
         return res.status(400).json({
           success: false,
-          msg: "fineId missing in fines array"
+          msg: "fineId missing in fines array",
         });
       }
     }
 
-    // Fetch fines from DB (security)
+    // Fetch fines
     const fineRecords = await FineModel.find({
-      _id: { $in: fines.map(f => f.fineId) }
+      _id: { $in: fines.map(f => f.fineId) },
     });
 
     if (fineRecords.length !== fines.length) {
       return res.status(404).json({
         success: false,
-        msg: "Some fines do not exist"
+        msg: "Some fines do not exist",
       });
     }
 
+    // Prepare fines
     const processedFines = fines.map(inputFine => {
       const dbFine = fineRecords.find(
-        f => f._id.toString() === inputFine.fineId
+        f => f._id.toString() === inputFine.fineId.toString()
       );
 
       return {
@@ -127,7 +128,7 @@ exports.addHistory = async (req, res) => {
         name: dbFine.name,
         amount: dbFine.amount,
         status: inputFine.status || "unpaid",
-        paidAt: inputFine.status === "paid" ? new Date() : null
+        paidAt: inputFine.status === "paid" ? new Date() : null,
       };
     });
 
@@ -141,29 +142,32 @@ exports.addHistory = async (req, res) => {
       student,
       fines: processedFines,
       totalFine,
-      addedBy: req.user._id
+      addedBy: req.user._id,
     });
 
     await history.populate("student", "name email");
 
-    // SEND EMAIL
-    await sendFineAddedEmail(history.student, history);
-
+    // ✅ RESPOND FIRST (CRITICAL FIX)
     res.status(201).json({
       success: true,
       msg: "History added successfully",
-      history
+      history,
     });
+
+    // ✅ SEND EMAIL ASYNC (DO NOT BLOCK API)
+    sendFineAddedEmail(history.student, history)
+      .catch(err => console.error("EMAIL ERROR:", err.message));
 
   } catch (error) {
     console.error("ADD HISTORY ERROR:", error);
     res.status(500).json({
       success: false,
       msg: "Server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
+
 
 // =====================================
 // GET ALL HISTORY (ADMIN / STAFF)
